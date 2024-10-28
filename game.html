@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Memória - Dengue</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Poppins', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #e0f7fa;
+            overflow: hidden;
+            animation: fadeIn 1.5s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+            color: #00796b;
+        }
+        .game-container {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(4, 100px);
+            grid-gap: 10px;
+            margin-right: 20px;
+        }
+        .card {
+            width: 100px;
+            height: 150px;
+            perspective: 1000px;
+            position: relative;
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .card.is-flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .card-front {
+            background-color: #00796b;
+            color: white;
+            cursor: pointer;
+            font-size: 2rem;
+        }
+        .card-back {
+            background-color: white;
+            color: black;
+            transform: rotateY(180deg);
+            padding: 10px;
+            text-align: center;
+        }
+        .question-card .card-back {
+            background-color: lightblue;
+        }
+        .answer-card .card-back {
+            background-color: lightyellow;
+        }
+        .score-board {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0 20px;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            color: #333;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #00796b;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-top: -35px;
+        }
+        button:hover {
+            background-color: #004d40;
+        }
+        .timer {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .ranking {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .thank-you-screen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            font-size: 2rem;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Jogo da Memória</h1>
+    <div class="timer">Tempo: <span id="elapsed-time">0</span> segundos</div>
+    <div class="game-container">
+        <div class="game-board"></div>
+        <div class="ranking" id="ranking"></div>
+    </div>
+    <div class="score-board">
+        <div>Jogador: <span id="player"></span></div>
+        <div>Pontuação: <span id="score">0</span></div>
+    </div>
+    <button onclick="restartGame()">Reiniciar</button>
+    <div class="thank-you-screen" id="thank-you-screen">
+        Obrigado por jogar o Jogo da Memória!
+    </div>
+    <script>
+        const cards = [
+            { id: 1, question: 'O que é o mosquito Aedes aegypti?', answer: 'Vetor do vírus da dengue.' },
+            { id: 2, question: 'Onde ele se reproduz?', answer: 'Água parada.' },
+            { id: 3, question: 'Como prevenir a dengue?', answer: 'Eliminando focos de água parada.' },
+            { id: 4, question: 'Sintoma principal da dengue?', answer: 'Febre alta.' },
+            { id: 5, question: 'Qual é a cor do mosquito?', answer: 'Preto com listras brancas.' },
+            { id: 6, question: 'Qual o ciclo de vida?', answer: 'Ovo, larva, pupa, adulto.' }
+        ];
+
+        let correctPairs = 0;
+        let flippedCards = [];
+        let disableFlip = false;
+        let startTime, elapsedTimeInterval;
+
+        const gameBoard = document.querySelector('.game-board');
+        const scoreElement = document.getElementById('score');
+        const elapsedTimeElement = document.getElementById('elapsed-time');
+        const rankingElement = document.getElementById('ranking');
+        const playerElement = document.getElementById('player');
+        const thankYouScreen = document.getElementById('thank-you-screen');
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const playerName = localStorage.getItem('playerName') || 'Jogador';
+            playerElement.textContent = playerName;
+            startGameTimer();
+            createCards();
+            fetchGlobalRanking();
+        });
+
+        function startGameTimer() {
+            startTime = Date.now();
+            elapsedTimeInterval = setInterval(() => {
+                const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+                elapsedTimeElement.textContent = elapsedSeconds;
+            }, 1000);
+        }
+
+        function stopGameTimer() {
+            clearInterval(elapsedTimeInterval);
+        }
+
+        function createCards() {
+            stopGameTimer();
+            const questionCards = cards.map(card => ({ id: card.id, content: card.question, type: 'question' }));
+            const answerCards = cards.map(card => ({ id: card.id, content: card.answer, type: 'answer' }));
+            const shuffledCards = shuffle([...questionCards, ...answerCards]);
+            gameBoard.innerHTML = '';
+
+            shuffledCards.forEach((card) => {
+                const cardElem = document.createElement('div');
+                cardElem.classList.add('card', card.type === 'question' ? 'question-card' : 'answer-card');
+
+                cardElem.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-front">?</div>
+                        <div class="card-back">${card.content}</div>
+                    </div>
+                `;
+
+                gameBoard.appendChild(cardElem);
+            });
+
+            const allCards = document.querySelectorAll('.card');
+            allCards.forEach(cardElem => cardElem.classList.add('is-flipped'));
+
+            setTimeout(() => {
+                allCards.forEach(cardElem => {
+                    cardElem.classList.remove('is-flipped');
+                });
+
+                setTimeout(() => {
+                    gameBoard.style.animation = 'shake 0.5s ease';
+                    setTimeout(() => {
+                        gameBoard.style.animation = '';
+                        const shuffledCards = shuffle([...questionCards, ...answerCards]);
+                        gameBoard.innerHTML = '';
+
+                        shuffledCards.forEach((card) => {
+                            const cardElem = document.createElement('div');
+                            cardElem.classList.add('card', card.type === 'question' ? 'question-card' : 'answer-card');
+
+                            cardElem.innerHTML = `
+                                <div class="card-inner">
+                                    <div class="card-front">?</div>
+                                    <div class="card-back">${card.content}</div>
+                                </div>
+                            `;
+
+                            gameBoard.appendChild(cardElem);
+                            cardElem.addEventListener('click', () => {
+                                if (!disableFlip) {
+                                    flipCard(cardElem, card);
+                                }
+                            });
+                        });
+
+                        startGameTimer();
+                    }, 500);
+                }, 400);
+            }, 3000);
+        }
+
+        function flipCard(cardElem, card) {
+            if (!cardElem.classList.contains('is-flipped')) {
+                cardElem.classList.add('is-flipped');
+                flippedCards.push({ element: cardElem, id: card.id, type: card.type });
+            } else {
+                cardElem.classList.remove('is-flipped');
+            }
+
+            if (flippedCards.length === 2) {
+                disableFlip = true;
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            const [firstCard, secondCard] = flippedCards;
+            if (firstCard.id === secondCard.id && firstCard.type !== secondCard.type) {
+                correctPairs++;
+                scoreElement.textContent = correctPairs;
+                flippedCards = [];
+                disableFlip = false;
+
+                if (correctPairs === cards.length) {
+                    stopGameTimer();
+                    const totalTime = (Date.now() - startTime) / 1000;
+                    saveScore(totalTime);
+                    showThankYouScreen();
+                }
+            } else {
+                setTimeout(() => {
+                    firstCard.element.classList.remove('is-flipped');
+                    secondCard.element.classList.remove('is-flipped');
+                    flippedCards = [];
+                    disableFlip = false;
+                }, 1000);
+            }
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function restartGame() {
+            correctPairs = 0;
+            scoreElement.textContent = correctPairs;
+            createCards();
+            startGameTimer();
+        }
+
+        function saveScore(totalTime) {
+            const playerName = localStorage.getItem('playerName') || 'Jogador';
+            fetch('/api/ranking', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player: playerName, time: totalTime })
+            })
+            .then(response => response.json())
+            .then(data => {
+                fetchGlobalRanking();
+            })
+            .catch(error => console.error('Erro ao salvar o ranking:', error));
+        }
+
+        function fetchGlobalRanking() {
+            fetch('/api/ranking')
+                .then(response => response.json())
+                .then(data => {
+                    rankingElement.innerHTML = '<h2>Ranking Global</h2>';
+                    let rankingHTML = '<ul>';
+                    data.forEach(score => {
+                        rankingHTML += `<li>${score.player}: ${score.time.toFixed(2)} segundos</li>`;
+                    });
+                    rankingHTML += '</ul>';
+                    rankingElement.innerHTML += rankingHTML;
+                })
+                .catch(error => console.error('Erro ao buscar ranking:', error));
+        }
+
+        function showThankYouScreen() {
+            thankYouScreen.style.display = 'flex';
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
